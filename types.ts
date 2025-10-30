@@ -39,6 +39,12 @@ export interface Party {
   }
 }
 
+export interface Table {
+  boundingBox: BoundingBox; // Bounding box of the entire table area
+  rows: number[]; // Array of normalized y-coordinates for horizontal lines
+  columns: number[]; // Array of normalized x-coordinates for vertical lines
+}
+
 export interface InvoiceData {
   invoiceNumber: string;
   invoiceDate: string;
@@ -47,10 +53,17 @@ export interface InvoiceData {
   totalDeclaredValue: number;
   currency: string;
   lineItems: LineItem[];
+  tables?: Table[];
   fields?: {
     invoiceNumber?: FieldMetadata;
     invoiceDate?: FieldMetadata;
     totalDeclaredValue?: FieldMetadata;
     currency?: FieldMetadata;
   }
+}
+
+export interface VendorTemplate {
+  id: string;
+  vendorName: string;
+  invoiceData: InvoiceData;
 }

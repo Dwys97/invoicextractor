@@ -13,6 +13,25 @@ interface ExtractedDataDisplayProps {
   isReExtracting: boolean;
 }
 
+const ConfidenceIndicator: React.FC<{ score: number | undefined }> = ({ score }) => {
+  if (score === undefined || score === null) return null;
+
+  const getConfidenceColor = (s: number) => {
+    if (s >= 0.9) return 'bg-green-500';
+    if (s >= 0.7) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  return (
+    <div className="group relative flex items-center" title={`Confidence: ${Math.round(score * 100)}%`}>
+      <div className={`w-2 h-2 rounded-full ${getConfidenceColor(score)}`}></div>
+      <div className="absolute left-4 w-max bottom-full mb-1 px-2 py-1 text-xs text-white bg-slate-700 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+        Confidence: {Math.round(score * 100)}%
+      </div>
+    </div>
+  );
+};
+
 const ReExtractButton: React.FC<{fieldPath: string, onReExtract: (path: string) => void, selectionBox: BoundingBox | null, isReExtracting: boolean}> = 
   ({ fieldPath, onReExtract, selectionBox, isReExtracting }) => (
   <button 
@@ -36,11 +55,15 @@ const InputField: React.FC<{
   onReExtract: (fieldPath: string) => void;
   selectionBox: BoundingBox | null;
   isReExtracting: boolean;
+  confidenceScore?: number;
   type?: string; 
   placeholder?: string;
-}> = ({ label, value, fieldPath, onChange, onFocus, onBlur, onReExtract, selectionBox, isReExtracting, type = 'text', placeholder }) => (
+}> = ({ label, value, fieldPath, onChange, onFocus, onBlur, onReExtract, selectionBox, isReExtracting, confidenceScore, type = 'text', placeholder }) => (
   <div className="relative">
-    <label className="block text-sm font-medium text-slate-500 dark:text-slate-400">{label}</label>
+    <div className="flex items-center gap-1.5">
+        <label className="block text-sm font-medium text-slate-500 dark:text-slate-400">{label}</label>
+        <ConfidenceIndicator score={confidenceScore} />
+    </div>
     <input
       type={type}
       value={value}
@@ -76,9 +99,13 @@ const PartyEditor: React.FC<{
       onReExtract={onReExtract}
       selectionBox={selectionBox}
       isReExtracting={isReExtracting}
+      confidenceScore={get(party, 'fields.name.confidence')}
     />
     <div className="relative">
-      <label className="block text-sm font-medium text-slate-500 dark:text-slate-400">Address</label>
+      <div className="flex items-center gap-1.5">
+        <label className="block text-sm font-medium text-slate-500 dark:text-slate-400">Address</label>
+        <ConfidenceIndicator score={get(party, 'fields.address.confidence')} />
+      </div>
       <textarea
         value={party.address || ''}
         onChange={(e) => onChange({ ...party, address: e.target.value })}
@@ -139,10 +166,10 @@ const ExtractedDataDisplay: React.FC<ExtractedDataDisplayProps> = ({ data, setDa
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
-        <InputField label="Invoice Number" value={data.invoiceNumber || ''} fieldPath="invoiceNumber" onChange={(e) => handleFieldChange('invoiceNumber', e.target.value)} onFocus={() => setActiveFieldPath('fields.invoiceNumber.boundingBox')} onBlur={() => setActiveFieldPath(null)} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting}/>
-        <InputField label="Invoice Date" value={data.invoiceDate || ''} fieldPath="invoiceDate" onChange={(e) => handleFieldChange('invoiceDate', e.target.value)} type="date" onFocus={() => setActiveFieldPath('fields.invoiceDate.boundingBox')} onBlur={() => setActiveFieldPath(null)} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting}/>
-        <InputField label="Currency" value={data.currency || ''} fieldPath="currency" onChange={(e) => handleFieldChange('currency', e.target.value.toUpperCase())} placeholder="USD" onFocus={() => setActiveFieldPath('fields.currency.boundingBox')} onBlur={() => setActiveFieldPath(null)} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting}/>
-        <InputField label="Total Declared Value" value={data.totalDeclaredValue || 0} fieldPath="totalDeclaredValue" onChange={(e) => handleFieldChange('totalDeclaredValue', parseFloat(e.target.value) || 0)} type="number" onFocus={() => setActiveFieldPath('fields.totalDeclaredValue.boundingBox')} onBlur={() => setActiveFieldPath(null)} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting}/>
+        <InputField label="Invoice Number" value={data.invoiceNumber || ''} fieldPath="invoiceNumber" onChange={(e) => handleFieldChange('invoiceNumber', e.target.value)} onFocus={() => setActiveFieldPath('fields.invoiceNumber.boundingBox')} onBlur={() => setActiveFieldPath(null)} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} confidenceScore={get(data, 'fields.invoiceNumber.confidence')}/>
+        <InputField label="Invoice Date" value={data.invoiceDate || ''} fieldPath="invoiceDate" onChange={(e) => handleFieldChange('invoiceDate', e.target.value)} type="date" onFocus={() => setActiveFieldPath('fields.invoiceDate.boundingBox')} onBlur={() => setActiveFieldPath(null)} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} confidenceScore={get(data, 'fields.invoiceDate.confidence')}/>
+        <InputField label="Currency" value={data.currency || ''} fieldPath="currency" onChange={(e) => handleFieldChange('currency', e.target.value.toUpperCase())} placeholder="USD" onFocus={() => setActiveFieldPath('fields.currency.boundingBox')} onBlur={() => setActiveFieldPath(null)} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} confidenceScore={get(data, 'fields.currency.confidence')}/>
+        <InputField label="Total Declared Value" value={data.totalDeclaredValue || 0} fieldPath="totalDeclaredValue" onChange={(e) => handleFieldChange('totalDeclaredValue', parseFloat(e.target.value) || 0)} type="number" onFocus={() => setActiveFieldPath('fields.totalDeclaredValue.boundingBox')} onBlur={() => setActiveFieldPath(null)} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} confidenceScore={get(data, 'fields.totalDeclaredValue.confidence')}/>
       </div>
 
       <div className="grid grid-cols-1 gap-6">
@@ -156,16 +183,34 @@ const ExtractedDataDisplay: React.FC<ExtractedDataDisplayProps> = ({ data, setDa
             {(data.lineItems || []).map((item, index) => (
                 <div key={index} onFocus={() => setActiveFieldPath(`lineItems[${index}].boundingBox`)} onBlur={() => setActiveFieldPath(null)} className="bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 space-y-2">
                     <div className="relative">
-                        <label className="text-xs text-slate-500">Description</label>
-                        <input type="text" value={item.description} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.description.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'description', e.target.value)} className="w-full bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600"/>
+                        <div className="flex items-center gap-1.5">
+                            <label className="text-xs text-slate-500">Description</label>
+                            <ConfidenceIndicator score={get(item, 'fields.description.confidence')} />
+                        </div>
+                        <input type="text" value={item.description} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.description.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'description', e.target.value)} className="w-full bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600 mt-0.5"/>
                         <ReExtractButton fieldPath={`lineItems[${index}].description`} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} />
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                         <div className="relative"><label className="text-xs text-slate-500">Qty</label><input type="number" value={item.quantity} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.quantity.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'quantity', e.target.value)} className="w-full text-right bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600"/><ReExtractButton fieldPath={`lineItems[${index}].quantity`} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} /></div>
-                         <div className="relative"><label className="text-xs text-slate-500">Unit Price</label><input type="number" value={item.unitPrice} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.unitPrice.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'unitPrice', e.target.value)} className="w-full text-right bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600"/><ReExtractButton fieldPath={`lineItems[${index}].unitPrice`} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} /></div>
-                         <div className="relative"><label className="text-xs text-slate-500">Total</label><input type="number" value={item.totalPrice} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.totalPrice.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'totalPrice', e.target.value)} className="w-full text-right bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600"/><ReExtractButton fieldPath={`lineItems[${index}].totalPrice`} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} /></div>
-                         <div className="relative"><label className="text-xs text-slate-500">Origin</label><input type="text" value={item.countryOfOrigin} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.countryOfOrigin.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'countryOfOrigin', e.target.value)} className="w-full bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600"/><ReExtractButton fieldPath={`lineItems[${index}].countryOfOrigin`} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} /></div>
-                         <div className="relative"><label className="text-xs text-slate-500">HS Code</label><input type="text" value={item.hsCode} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.hsCode.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'hsCode', e.target.value)} className="w-full bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600"/><ReExtractButton fieldPath={`lineItems[${index}].hsCode`} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} /></div>
+                        <div className="relative">
+                            <div className="flex items-center gap-1.5"><label className="text-xs text-slate-500">Qty</label><ConfidenceIndicator score={get(item, 'fields.quantity.confidence')} /></div>
+                            <input type="number" value={item.quantity} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.quantity.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'quantity', e.target.value)} className="w-full text-right bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600 mt-0.5"/><ReExtractButton fieldPath={`lineItems[${index}].quantity`} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} />
+                        </div>
+                        <div className="relative">
+                            <div className="flex items-center gap-1.5"><label className="text-xs text-slate-500">Unit Price</label><ConfidenceIndicator score={get(item, 'fields.unitPrice.confidence')} /></div>
+                            <input type="number" value={item.unitPrice} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.unitPrice.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'unitPrice', e.target.value)} className="w-full text-right bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600 mt-0.5"/><ReExtractButton fieldPath={`lineItems[${index}].unitPrice`} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} />
+                        </div>
+                        <div className="relative">
+                            <div className="flex items-center gap-1.5"><label className="text-xs text-slate-500">Total</label><ConfidenceIndicator score={get(item, 'fields.totalPrice.confidence')} /></div>
+                            <input type="number" value={item.totalPrice} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.totalPrice.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'totalPrice', e.target.value)} className="w-full text-right bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600 mt-0.5"/><ReExtractButton fieldPath={`lineItems[${index}].totalPrice`} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} />
+                        </div>
+                        <div className="relative">
+                            <div className="flex items-center gap-1.5"><label className="text-xs text-slate-500">Origin</label><ConfidenceIndicator score={get(item, 'fields.countryOfOrigin.confidence')} /></div>
+                            <input type="text" value={item.countryOfOrigin} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.countryOfOrigin.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'countryOfOrigin', e.target.value)} className="w-full bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600 mt-0.5"/><ReExtractButton fieldPath={`lineItems[${index}].countryOfOrigin`} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} />
+                        </div>
+                        <div className="relative">
+                            <div className="flex items-center gap-1.5"><label className="text-xs text-slate-500">HS Code</label><ConfidenceIndicator score={get(item, 'fields.hsCode.confidence')} /></div>
+                            <input type="text" value={item.hsCode} onFocus={() => setActiveFieldPath(`lineItems[${index}].fields.hsCode.boundingBox`)} onBlur={() => setActiveFieldPath(null)} onChange={(e) => handleItemFieldChange(index, 'hsCode', e.target.value)} className="w-full bg-transparent p-1 rounded border border-slate-300 dark:border-slate-600 mt-0.5"/><ReExtractButton fieldPath={`lineItems[${index}].hsCode`} onReExtract={onReExtract} selectionBox={selectionBox} isReExtracting={isReExtracting} />
+                        </div>
                     </div>
                     <div className="flex justify-end pt-2 gap-2">
                         <button onClick={() => setEditingItem({ item, index })} className="text-xs inline-flex items-center text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400">

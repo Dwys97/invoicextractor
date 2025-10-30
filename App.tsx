@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { InvoiceData, BoundingBox } from './types';
-import { extractInvoiceData, reExtractTextFromImage } from './services/geminiService';
+import { extractInvoiceData, reExtractTextFromImage } from './services/apiClient';
 import { exportToCdsXml } from './services/xmlService';
 import FileUpload from './components/FileUpload';
 import ExtractedDataDisplay from './components/ExtractedDataDisplay';
@@ -17,7 +17,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeFieldPath, setActiveFieldPath] = useState<string | null>(null);
   const [selectionBox, setSelectionBox] = useState<BoundingBox | null>(null);
-  const pdfViewerRef = useRef<{ cropAndGetDataUrl: (box: BoundingBox) => string | null }>(null);
+  const pdfViewerRef = useRef<{ cropAndGetDataUrl: (box: BoundingBox) => Promise<string | null> }>(null);
 
   const handleFileSelect = (file: File) => {
     resetState();
@@ -63,7 +63,7 @@ const App: React.FC = () => {
     if (!selectionBox || !pdfViewerRef.current) return;
     
     setIsReExtracting(true);
-    const croppedImageBase64 = pdfViewerRef.current.cropAndGetDataUrl(selectionBox);
+    const croppedImageBase64 = await pdfViewerRef.current.cropAndGetDataUrl(selectionBox);
     
     if (croppedImageBase64) {
         try {
@@ -176,7 +176,7 @@ const App: React.FC = () => {
           </div>
 
           {/* Right Panel */}
-          <div className="lg:col-span-3 bg-white dark:bg-slate-800/50 p-4 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col">
+          <div className="lg:col-span-3 bg-white dark:bg-slate-800/50 p-4 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col min-h-0">
               <h2 className="text-xl font-bold mb-4 flex items-center text-slate-700 dark:text-slate-200">
                 {isLoading ? <ArrowPathIcon className="animate-spin w-6 h-6 mr-2 text-blue-500"/> : <CheckCircleIcon className="w-6 h-6 mr-2 text-blue-500"/>}
                 2. Review & Edit
@@ -214,6 +214,11 @@ const App: React.FC = () => {
               </div>
           </div>
         </main>
+        <footer className="text-center p-2 border-t border-slate-200 dark:border-slate-700">
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+                Notice: This is a demonstration application. For commercial or GDPR-compliant use, all data processing must be performed via a secure backend integrated with a regional Vertex AI endpoint.
+            </p>
+        </footer>
       </div>
     </div>
   );

@@ -18,19 +18,28 @@ interface PdfViewerProps {
 const PdfViewer = forwardRef(({ file, data, activeFieldPath, selectionBox, onSelectionBoxChange }: PdfViewerProps, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const renderTask = useRef<pdfjsLib.RenderTask | null>(null);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
-  const [scale, setScale] = useState(1);
+  const [numPages, setNumPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState<{x: number, y: number} | null>(null);
 
   useEffect(() => {
-    if (!file) return;
+    if (!file) {
+      setPdfDoc(null);
+      setNumPages(0);
+      setCurrentPage(1);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = async (e) => {
       if (e.target?.result) {
         const loadingTask = pdfjsLib.getDocument({ data: e.target.result as ArrayBuffer });
         const pdf = await loadingTask.promise;
         setPdfDoc(pdf);
+        setNumPages(pdf.numPages);
+        setCurrentPage(1);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -38,13 +47,15 @@ const PdfViewer = forwardRef(({ file, data, activeFieldPath, selectionBox, onSel
 
   const renderPage = async (pageNum: number) => {
     if (!pdfDoc) return;
+    if (renderTask.current) {
+      renderTask.current.cancel();
+    }
+
     const page = await pdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1 });
     const container = containerRef.current;
     if (!container) return;
 
-    const scale = container.clientWidth / viewport.width;
-    setScale(scale);
+    const scale = container.clientWidth / page.getViewport({ scale: 1 }).width;
     const scaledViewport = page.getViewport({ scale });
 
     const canvas = canvasRef.current;
@@ -59,50 +70,58 @@ const PdfViewer = forwardRef(({ file, data, activeFieldPath, selectionBox, onSel
       canvasContext: context,
       viewport: scaledViewport,
     };
-    await page.render(renderContext).promise;
+    renderTask.current = page.render(renderContext);
+    await renderTask.current.promise;
+    renderTask.current = null;
   };
   
   useImperativeHandle(ref, () => ({
-    cropAndGetDataUrl: (box: BoundingBox): string | null => {
-        const canvas = canvasRef.current;
-        if (!canvas) return null;
+    cropAndGetDataUrl: async (box: BoundingBox): Promise<string | null> => {
+        if (!pdfDoc) return null;
+        
+        const page = await pdfDoc.getPage(box.page);
+        // Use a higher resolution for better OCR results on the cropped image
+        const viewport = page.getViewport({ scale: 2.0 });
 
-        const [x1, y1, x2, y2] = box;
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
         if (!tempCtx) return null;
 
-        const width = (x2 - x1) * canvas.width;
-        const height = (y2 - y1) * canvas.height;
-        tempCanvas.width = width;
-        tempCanvas.height = height;
+        tempCanvas.width = viewport.width;
+        tempCanvas.height = viewport.height;
 
-        tempCtx.drawImage(
-            canvas,
-            x1 * canvas.width,
-            y1 * canvas.height,
-            width,
-            height,
-            0,
-            0,
-            width,
-            height
+        await page.render({ canvasContext: tempCtx, viewport }).promise;
+
+        const finalCanvas = document.createElement('canvas');
+        const finalCtx = finalCanvas.getContext('2d');
+        if (!finalCtx) return null;
+
+        const { x1, y1, x2, y2 } = box;
+        const width = (x2 - x1) * tempCanvas.width;
+        const height = (y2 - y1) * tempCanvas.height;
+        finalCanvas.width = width;
+        finalCanvas.height = height;
+
+        finalCtx.drawImage(
+            tempCanvas,
+            x1 * tempCanvas.width, y1 * tempCanvas.height, width, height,
+            0, 0, width, height
         );
-        return tempCanvas.toDataURL('image/png').split(',')[1];
+        return finalCanvas.toDataURL('image/png').split(',')[1];
     }
   }));
 
   useEffect(() => {
     if (pdfDoc) {
-      renderPage(1); // Render the first page
-      const handleResize = () => renderPage(1);
+      renderPage(currentPage);
+      const handleResize = () => renderPage(currentPage);
       window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
     }
-  }, [pdfDoc]);
+  }, [pdfDoc, currentPage]);
   
   const getBoxStyle = (box: BoundingBox, isActive: boolean = false, isSelection: boolean = false) => {
-      const [x1, y1, x2, y2] = box;
+      const { x1, y1, x2, y2 } = box;
       const baseStyle = {
           left: `${x1 * 100}%`,
           top: `${y1 * 100}%`,
@@ -118,7 +137,10 @@ const PdfViewer = forwardRef(({ file, data, activeFieldPath, selectionBox, onSel
       return { ...baseStyle, border: '1px solid #ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)' };
   };
 
-  const activeBox = activeFieldPath ? get(data, activeFieldPath) : null;
+  const activeBox = activeFieldPath ? get(data, activeFieldPath) as BoundingBox | undefined : null;
+  if (activeBox && activeBox.page !== currentPage) {
+      setCurrentPage(activeBox.page);
+  }
   
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -126,7 +148,7 @@ const PdfViewer = forwardRef(({ file, data, activeFieldPath, selectionBox, onSel
     const y = (e.clientY - rect.top) / rect.height;
     setIsDrawing(true);
     setStartPoint({ x, y });
-    onSelectionBoxChange([x, y, x, y]);
+    onSelectionBoxChange({ page: currentPage, x1: x, y1: y, x2: x, y2: y });
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -139,7 +161,7 @@ const PdfViewer = forwardRef(({ file, data, activeFieldPath, selectionBox, onSel
     const y1 = Math.min(startPoint.y, currentY);
     const x2 = Math.max(startPoint.x, currentX);
     const y2 = Math.max(startPoint.y, currentY);
-    onSelectionBoxChange([x1, y1, x2, y2]);
+    onSelectionBoxChange({ page: currentPage, x1, y1, x2, y2 });
   };
 
   const handleMouseUp = () => {
@@ -148,52 +170,80 @@ const PdfViewer = forwardRef(({ file, data, activeFieldPath, selectionBox, onSel
   };
 
   const getAllBoxes = (invoiceData: InvoiceData): { path: string, box: BoundingBox }[] => {
-    const boxes: { path: string, box: BoundingBox }[] = [];
+      const boxes: { path: string, box: BoundingBox }[] = [];
+      const recurse = (current: any, path: string) => {
+          if (current === null || typeof current !== 'object') {
+              return;
+          }
+          if (current.boundingBox && typeof current.boundingBox === 'object' && 'page' in current.boundingBox) {
+              boxes.push({ path: `${path}.boundingBox`, box: current.boundingBox });
+          }
 
-    const recurse = (obj: any, path: string) => {
-        if (obj && typeof obj === 'object') {
-            if (obj.boundingBox && Array.isArray(obj.boundingBox)) {
-                boxes.push({ path: `${path}.boundingBox`, box: obj.boundingBox });
-            }
-            Object.keys(obj).forEach(key => {
-                if(key !== 'boundingBox') {
-                   recurse(obj[key], path ? `${path}.${key}` : key);
-                }
-            });
-        }
-    };
-    
-    recurse(invoiceData, '');
-    return boxes;
+          if (Array.isArray(current)) {
+              current.forEach((item, index) => {
+                  recurse(item, `${path}[${index}]`);
+              });
+          } else {
+              Object.keys(current).forEach(key => {
+                  if (key !== 'boundingBox') {
+                      const newPath = path ? `${path}.${key}` : key;
+                      recurse(current[key], newPath);
+                  }
+              });
+          }
+      };
+      recurse(invoiceData, '');
+      return boxes;
   };
   
   const allBoxes = data ? getAllBoxes(data) : [];
 
   return (
-    <div ref={containerRef} className="w-full h-full relative overflow-auto bg-slate-200 dark:bg-slate-900 flex items-start justify-center">
+    <div ref={containerRef} className="w-full h-full relative overflow-auto bg-slate-200 dark:bg-slate-900 flex items-start justify-center p-4">
       {!file && <div className="m-auto text-slate-400 dark:text-slate-500">Document preview will appear here</div>}
       <div 
-        className="relative"
+        className="relative shadow-lg"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp} // Stop drawing if mouse leaves container
       >
         <canvas ref={canvasRef} />
-        {data && allBoxes.map(({ path, box }) => (
+        {data && allBoxes
+            .filter(({ box }) => box.page === currentPage)
+            .map(({ path, box }) => (
             <div
                 key={path}
-                className="absolute"
+                className="absolute pointer-events-none"
                 style={getBoxStyle(box, path === activeFieldPath)}
             />
         ))}
-        {selectionBox && (
+        {selectionBox && selectionBox.page === currentPage && (
             <div
-                className="absolute cursor-crosshair"
+                className="absolute cursor-crosshair pointer-events-none"
                 style={getBoxStyle(selectionBox, false, true)}
             />
         )}
       </div>
+       {numPages > 1 && (
+         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-slate-800 bg-opacity-70 backdrop-blur-sm text-white rounded-full px-4 py-1.5 flex items-center gap-4 text-sm shadow-lg">
+           <button 
+             onClick={() => setCurrentPage(p => p - 1)} 
+             disabled={currentPage <= 1}
+             className="disabled:opacity-50"
+            >
+             ‹ Prev
+           </button>
+           <span>{currentPage} / {numPages}</span>
+           <button 
+             onClick={() => setCurrentPage(p => p + 1)} 
+             disabled={currentPage >= numPages}
+             className="disabled:opacity-50"
+            >
+             Next ›
+           </button>
+         </div>
+       )}
     </div>
   );
 });

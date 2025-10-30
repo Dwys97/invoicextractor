@@ -1,3 +1,26 @@
+// =================================================================================
+// IMPORTANT ARCHITECTURAL NOTE FOR PRODUCTION / GDPR COMPLIANCE
+// =================================================================================
+// This service file demonstrates a DIRECT client-side connection to a Google AI API.
+// While excellent for prototyping, this is NOT a suitable architecture for a
+// commercial, GDPR-compliant application.
+//
+// For a production system using Vertex AI, this logic MUST be moved to a
+// secure backend server (e.g., a Node.js, Python, or Go service).
+//
+// The correct workflow would be:
+// 1. Frontend (React app) uploads the file to YOUR backend.
+// 2. YOUR backend authenticates securely with Vertex AI using a Service Account or
+//    Workload Identity. Credentials are NEVER exposed to the client.
+// 3. YOUR backend calls the Vertex AI API, specifying a data processing region
+//    (e.g., 'europe-west1') to comply with GDPR data residency requirements.
+// 4. YOUR backend receives the response and forwards the structured JSON data
+//    back to the frontend.
+//
+// The model name in Vertex AI would also have a different format, e.g.:
+// model: "gemini-1.5-flash-001"
+// =================================================================================
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { InvoiceData } from "../types";
 
@@ -19,12 +42,25 @@ const fileToGenerativePart = async (file: File) => {
 };
 
 const BoundingBoxSchema = {
+    type: Type.OBJECT,
+    description: "The location of the value on the document.",
+    properties: {
+        page: { type: Type.INTEGER, description: "The 1-indexed page number where the value is found." },
+        x1: { type: Type.NUMBER, description: "Normalized X coordinate of the top-left corner (0 to 1)." },
+        y1: { type: Type.NUMBER, description: "Normalized Y coordinate of the top-left corner (0 to 1)." },
+        x2: { type: Type.NUMBER, description: "Normalized X coordinate of the bottom-right corner (0 to 1)." },
+        y2: { type: Type.NUMBER, description: "Normalized Y coordinate of the bottom-right corner (0 to 1)." },
+    },
+    required: ['page', 'x1', 'y1', 'x2', 'y2']
+};
+
+const FieldMetadataSchema = {
   type: Type.OBJECT,
   properties: {
-    boundingBox: {
-      type: Type.ARRAY,
-      description: "The bounding box coordinates [x1, y1, x2, y2] of the value on the document, normalized to a 0-1 range.",
-      items: { type: Type.NUMBER }
+    boundingBox: BoundingBoxSchema,
+    confidence: {
+      type: Type.NUMBER,
+      description: "A confidence score from 0.0 (low) to 1.0 (high) for the extracted value."
     }
   }
 };
@@ -37,8 +73,8 @@ const PartySchema = {
         fields: {
             type: Type.OBJECT,
             properties: {
-                name: BoundingBoxSchema,
-                address: BoundingBoxSchema,
+                name: FieldMetadataSchema,
+                address: FieldMetadataSchema,
             }
         }
     },
@@ -53,20 +89,16 @@ const LineItemSchema = {
     totalPrice: { type: Type.NUMBER, description: "Total price for the line item (quantity * unitPrice)." },
     countryOfOrigin: { type: Type.STRING, description: "The country where this specific line item's goods were manufactured. Look for labels like 'Country of Origin', 'Origin', or 'COO' associated with the item." },
     hsCode: { type: Type.STRING, description: "The Harmonized System (HS) code for this specific line item. Look for labels like 'HS Code', 'HTS Code', or 'Tariff Code' associated with the item." },
-    boundingBox: {
-      type: Type.ARRAY,
-      description: "The bounding box for the entire line item row.",
-      items: { type: Type.NUMBER }
-    },
+    boundingBox: BoundingBoxSchema,
     fields: {
         type: Type.OBJECT,
         properties: {
-            description: BoundingBoxSchema,
-            quantity: BoundingBoxSchema,
-            unitPrice: BoundingBoxSchema,
-            totalPrice: BoundingBoxSchema,
-            countryOfOrigin: BoundingBoxSchema,
-            hsCode: BoundingBoxSchema
+            description: FieldMetadataSchema,
+            quantity: FieldMetadataSchema,
+            unitPrice: FieldMetadataSchema,
+            totalPrice: FieldMetadataSchema,
+            countryOfOrigin: FieldMetadataSchema,
+            hsCode: FieldMetadataSchema
         }
     }
   },
@@ -85,16 +117,16 @@ const invoiceSchema = {
     fields: {
       type: Type.OBJECT,
       properties: {
-        invoiceNumber: BoundingBoxSchema,
-        invoiceDate: BoundingBoxSchema,
-        totalDeclaredValue: BoundingBoxSchema,
-        currency: BoundingBoxSchema
+        invoiceNumber: FieldMetadataSchema,
+        invoiceDate: FieldMetadataSchema,
+        totalDeclaredValue: FieldMetadataSchema,
+        currency: FieldMetadataSchema
       }
     }
   },
 };
 
-export const extractInvoiceData = async (file: File): Promise<InvoiceData | null> => {
+export const _extractInvoiceData = async (file: File): Promise<InvoiceData | null> => {
   if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable is not set.");
   }
@@ -108,7 +140,7 @@ export const extractInvoiceData = async (file: File): Promise<InvoiceData | null
       contents: {
           parts: [
               imagePart,
-              { text: "You are a meticulous data extraction expert specializing in customs documents. Extract all information from this invoice, including the bounding box for each value. It is critical to identify the `countryOfOrigin` and `hsCode` for each individual line item, as they may differ. These fields may have labels like 'Origin', 'COO', 'HTS Code', or 'Tariff Code'. Populate all fields in the provided JSON schema with the highest accuracy." }
+              { text: "You are a meticulous data extraction expert specializing in customs documents. Extract all information from this invoice, including a bounding box object (with page number and coordinates) and a confidence score (from 0.0 to 1.0) for each value. It is critical to identify the `countryOfOrigin` and `hsCode` for each individual line item, as they may differ. These fields may have labels like 'Origin', 'COO', 'HTS Code', or 'Tariff Code'. Populate all fields in the provided JSON schema with the highest accuracy." }
           ]
       },
       config: {
@@ -132,7 +164,7 @@ export const extractInvoiceData = async (file: File): Promise<InvoiceData | null
   }
 };
 
-export const reExtractTextFromImage = async (base64Image: string): Promise<string> => {
+export const _reExtractTextFromImage = async (base64Image: string): Promise<string> => {
     if (!process.env.API_KEY) {
         throw new Error("API_KEY environment variable is not set.");
     }

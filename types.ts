@@ -1,5 +1,15 @@
+export interface BoundingBox {
+  page: number; // 1-indexed page number
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
 
-export type BoundingBox = [number, number, number, number]; // [x1, y1, x2, y2] normalized
+export interface FieldMetadata {
+  boundingBox?: BoundingBox;
+  confidence?: number; // A score from 0.0 to 1.0
+}
 
 export interface LineItem {
   description: string;
@@ -9,14 +19,14 @@ export interface LineItem {
   countryOfOrigin: string;
   hsCode: string;
   cdsOverrides?: string[];
-  boundingBox?: BoundingBox;
+  boundingBox?: BoundingBox; // For the entire row
   fields?: {
-    description?: { boundingBox?: BoundingBox };
-    quantity?: { boundingBox?: BoundingBox };
-    unitPrice?: { boundingBox?: BoundingBox };
-    totalPrice?: { boundingBox?: BoundingBox };
-    countryOfOrigin?: { boundingBox?: BoundingBox };
-    hsCode?: { boundingBox?: BoundingBox };
+    description?: FieldMetadata;
+    quantity?: FieldMetadata;
+    unitPrice?: FieldMetadata;
+    totalPrice?: FieldMetadata;
+    countryOfOrigin?: FieldMetadata;
+    hsCode?: FieldMetadata;
   }
 }
 
@@ -24,8 +34,8 @@ export interface Party {
   name: string;
   address: string;
   fields?: {
-    name?: { boundingBox?: BoundingBox };
-    address?: { boundingBox?: BoundingBox };
+    name?: FieldMetadata;
+    address?: FieldMetadata;
   }
 }
 
@@ -38,9 +48,9 @@ export interface InvoiceData {
   currency: string;
   lineItems: LineItem[];
   fields?: {
-    invoiceNumber?: { boundingBox?: BoundingBox };
-    invoiceDate?: { boundingBox?: BoundingBox };
-    totalDeclaredValue?: { boundingBox?: BoundingBox };
-    currency?: { boundingBox?: BoundingBox };
+    invoiceNumber?: FieldMetadata;
+    invoiceDate?: FieldMetadata;
+    totalDeclaredValue?: FieldMetadata;
+    currency?: FieldMetadata;
   }
 }

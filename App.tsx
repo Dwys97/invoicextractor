@@ -133,15 +133,16 @@ const App: React.FC = () => {
 
   const handleFieldFocus = (path: string | null) => {
     setActiveFieldPath(path);
-    if (path && editedData) {
-      // Directly get the bounding box object using the provided path.
-      // This is much more reliable than trying to parse the path string.
-      const box = get(editedData, path) as BoundingBox | undefined;
+    if (path && editedData && pdfViewerRef.current) {
+        // Use lodash's get to safely access the nested bounding box property.
+        // This is robust and works for any valid path string provided by the child components.
+        const box = get(editedData, path) as BoundingBox | undefined;
 
-      // Ensure we found a valid box object before trying to zoom.
-      if (box && typeof box === 'object' && 'page' in box && pdfViewerRef.current) {
-        pdfViewerRef.current.zoomToBox(box);
-      }
+        // Ensure we found a valid box object before telling the viewer to zoom.
+        // The viewer's zoomToBox function will handle the page switching and animation.
+        if (box && typeof box.page === 'number') {
+            pdfViewerRef.current.zoomToBox(box);
+        }
     }
   };
 

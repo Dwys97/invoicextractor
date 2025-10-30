@@ -1,0 +1,5 @@
+{
+  "name": "Copy of Customs Invoice Extractor",
+  "description": "An intelligent tool to automatically extract and digitize data from customs clearance invoice documents using AI. Upload an invoice image to get structured data in seconds.",
+  "requestFramePermissions": []
+}
